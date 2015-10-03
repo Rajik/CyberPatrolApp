@@ -1,54 +1,42 @@
 class SambavamsController < ApplicationController
+  before_action :set_locations, only: [:plot, :safe_routes]
+
   def index
   end
 
   def plot
-    location_ids = '[{"id":"0"},{"id":"1"},{"id":"2"},{"id":"3"}]'
-    user = 'radhikab@thoughtworks.com'
-    password = 'radhikab'
-    user_id = '1201'
-    fetch_url = "https://api-eu.clusterpoint.com/#{user_id}/YaamirukaBayamen/_lookup.json"
-    @locations = locations_from_cluster(location_ids, fetch_url, user, password)
     render json: @locations, status: :ok
   end
 
   def safe_routes
-    location_ids = '[{"id":"0"},{"id":"1"},{"id":"2"},{"id":"3"}]'
-    user = 'radhikab@thoughtworks.com'
-    password = 'radhikab'
-    user_id = '1201'
-    fetch_url = "https://api-eu.clusterpoint.com/#{user_id}/YaamirukaBayamen/_lookup.json"
-    @locations = locations_from_cluster(location_ids, fetch_url, user, password)
-
-    api_key = 'AIzaSyAYU_fYcPQGp1FnLfH4W0F07hofMQkvZcQ'
-    origin = 'Porur,IN'
-    destination = 'Adyar,IN'
-    url = "https://maps.googleapis.com/maps/api/directions/json?origin=#{origin}&destination=#{destination}&key=#{api_key}"
+    crisis_locations = locations(@locations)
     paths = []
-    routes_json = routes_from_maps(url)
+    routes_json = routes_from_maps(request_url)
     routes_json["routes"].each do |route|
-      ne_bound = route["bounds"]["northeast"]
-      sw_bound = route["bounds"]["southwest"]
-      path = Path.new(start_point: origin, end_point: destination, occurences: 0, unsafe_measure: 0, bounds: [ne_bound,sw_bound])
-      path = traverse_route(route, path)
+      path = construct_path(route)
+      path = traverse_route(route, path, crisis_locations)
       paths << path
     end
-    routes = categorised_routes(paths)
+    safe_routes = categorised_routes(paths)
     route_bounds = []
-    routes[0].each do |route|
-      route_bounds << {"bounds"=>[{"lat"=>route.bounds[0]["lat"],"lng"=>route.bounds[0]["lng"]},
-                         {"lat"=>route.bounds[1]["lat"],"lng"=>route.bounds[1]["lng"]}]
-      }
-    end
-    routes[1].each do |route|
-      route_bounds << {"bounds"=>[{"lat"=>route.bounds[0]["lat"],"lng"=>route.bounds[0]["lng"]},
-                                  {"lat"=>route.bounds[1]["lat"],"lng"=>route.bounds[1]["lng"]}]
+    safe_routes.each do |safe_route|
+      route_bounds << {"bounds" => [{"lat" => safe_route.bounds[0]["lat"], "lng" => safe_route.bounds[0]["lng"]},
+                                    {"lat" => safe_route.bounds[1]["lat"], "lng" => safe_route.bounds[1]["lng"]}]
       }
     end
     render json: route_bounds, status: :ok
   end
 
   private
+  def set_locations
+    location_ids = '[{"id":"0"},{"id":"1"},{"id":"2"},{"id":"3"},{"id":"4"},{"id":"5"}]'
+    user = 'radhikab@thoughtworks.com'
+    password = 'radhikab'
+    user_id = '1201'
+    fetch_url = "https://api-eu.clusterpoint.com/#{user_id}/YaamirukaBayamen/_lookup.json"
+    @locations = locations_from_cluster(location_ids, fetch_url, user, password)
+  end
+
   def locations_from_cluster(payload, cluster_url, username, password)
     resource = RestClient::Resource.new(cluster_url, user: username, password: password)
     response = resource.post(payload)
@@ -64,10 +52,30 @@ class SambavamsController < ApplicationController
     locations
   end
 
+  def init_safe_route_path
+    origin = '12.9259,77.6229' #Koramangala
+    destination = '12.9822012,77.60834390000002' #Commercial Street
+    [origin, destination]
+  end
+
+  def request_url
+    api_key = 'AIzaSyAYU_fYcPQGp1FnLfH4W0F07hofMQkvZcQ'
+    origin, destination = init_safe_route_path
+    alternative_routes = true
+    "https://maps.googleapis.com/maps/api/directions/json?origin=#{origin}&destination=#{destination}&alternatives=#{alternative_routes}&key=#{api_key}"
+  end
+
   def routes_from_maps(url)
     resource = RestClient::Resource.new(url)
     response = resource.get
     JSON.parse(response.body)
+  end
+
+  def construct_path(route)
+    origin, destination = init_safe_route_path
+    ne_bound = route["bounds"]["northeast"]
+    sw_bound = route["bounds"]["southwest"]
+    Path.new(start_point: origin, end_point: destination, occurences: 0, unsafe_measure: 0, bounds: [ne_bound, sw_bound])
   end
 
   def update_path(crisis_locations, path, latitude, longitude)
@@ -79,33 +87,32 @@ class SambavamsController < ApplicationController
     path
   end
 
-  def traverse_route(route, path)
+  def traverse_route(route, path, crisis_locations)
     points = []
     route["legs"].each do |leg|
-        leg["steps"].each do |step|
-          start_point_lat = step["start_location"]["lat"]
-          start_point_long = step["start_location"]["lng"]
-          crisis_locations = locations(@locations)
-          update_path(crisis_locations, path, start_point_lat, start_point_long) unless points.include?([start_point_lat,start_point_long])
-          points << [start_point_lat, start_point_long]
-          end_point_lat = step["end_location"]["lat"]
-          end_point_long = step["end_location"]["lng"]
-          update_path(crisis_locations, path, end_point_lat, end_point_long) unless points.include?([end_point_lat,end_point_long])
-          points << [end_point_lat, end_point_long]
-        end
+      leg["steps"].each do |step|
+        start_point_lat = step["start_location"]["lat"]
+        start_point_long = step["start_location"]["lng"]
+        path = update_path(crisis_locations, path, start_point_lat, start_point_long) unless points.include?([start_point_lat,start_point_long])
+        points << [start_point_lat, start_point_long]
+        end_point_lat = step["end_location"]["lat"]
+        end_point_long = step["end_location"]["lng"]
+        path = update_path(crisis_locations, path, end_point_lat, end_point_long) unless points.include?([end_point_lat,end_point_long])
+        points << [end_point_lat, end_point_long]
+      end
     end
     path
   end
 
   def categorised_routes(paths)
-    minimum_occurence = paths.collect(&:occurences).min
-    minimum_weightage = paths.collect(&:unsafe_measure).min
-    routes_with_min_occurence = paths.select {|path| path.occurences == minimum_occurence}
-    if minimum_occurence == 0
-      [routes_with_min_occurence,nil]
+    minimum_occurrence = paths.collect(&:occurences).min
+    minimum_unsafe_measure = paths.collect(&:unsafe_measure).min
+    min_occurrence_route = paths.select {|path| path.occurences == minimum_occurrence}.first
+    if minimum_occurrence == 0
+      [min_occurrence_route,nil]
     else
-      routes_with_min_unsafe_measure = paths.select {|path| path.unsafe_measure == minimum_weightage}
-      [routes_with_min_occurence,routes_with_min_unsafe_measure]
+      min_unsafe_route = paths.select {|path| path.unsafe_measure == minimum_unsafe_measure}.first
+      [min_occurrence_route,min_unsafe_route]
     end
   end
 end
