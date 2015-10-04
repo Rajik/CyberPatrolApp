@@ -29,11 +29,11 @@ class SambavamsController < ApplicationController
 
   private
   def set_locations
-    location_ids = '[{"id":"0"},{"id":"1"},{"id":"2"},{"id":"3"},{"id":"4"},{"id":"5"}]'
+    location_ids = '[{"id":"0"},{"id":"1"},{"id":"2"},{"id":"3"},{"id":"4"},{"id":"5"},{"id":"6"},{"id":"7"}]'
     user = 'radhikab@thoughtworks.com'
     password = 'radhikab'
     user_id = '1201'
-    fetch_url = "https://api-eu.clusterpoint.com/#{user_id}/YaamirukaBayamen/_lookup.json"
+    fetch_url = "https://api-eu.clusterpoint.com/#{user_id}/CyberPatrolProd/_lookup.json"
     @locations = locations_from_cluster(location_ids, fetch_url, user, password)
   end
 
@@ -108,11 +108,7 @@ class SambavamsController < ApplicationController
     minimum_occurrence = paths.collect(&:occurences).min
     minimum_unsafe_measure = paths.collect(&:unsafe_measure).min
     min_occurrence_route = paths.select {|path| path.occurences == minimum_occurrence}.first
-    if minimum_occurrence == 0
-      [min_occurrence_route,nil]
-    else
-      min_unsafe_route = paths.select {|path| path.unsafe_measure == minimum_unsafe_measure}.first
-      [min_occurrence_route,min_unsafe_route]
-    end
+    min_unsafe_route = paths.select {|path| path.unsafe_measure == minimum_unsafe_measure}.first
+    [min_occurrence_route,min_unsafe_route]
   end
 end
