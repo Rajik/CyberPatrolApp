@@ -29,12 +29,12 @@ class SambavamsController < ApplicationController
 
   private
   def set_locations
-    location_ids = '[{"id":"0"},{"id":"1"},{"id":"2"},{"id":"3"},{"id":"4"},{"id":"5"},{"id":"6"},{"id":"7"}]'
+    params = '{"query":"*","docs":"100"}'
     user = 'radhikab@thoughtworks.com'
     password = 'radhikab'
     user_id = '1201'
-    fetch_url = "https://api-eu.clusterpoint.com/#{user_id}/CyberPatrolProd/_lookup.json"
-    @locations = locations_from_cluster(location_ids, fetch_url, user, password)
+    fetch_url = "https://api-eu.clusterpoint.com/#{user_id}/CyberPatrolProd/_search.json"
+    @locations = locations_from_cluster(params, fetch_url, user, password)
   end
 
   def locations_from_cluster(payload, cluster_url, username, password)
